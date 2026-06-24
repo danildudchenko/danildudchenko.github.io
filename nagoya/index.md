@@ -358,6 +358,118 @@ nt authority\system
 ```
 
 ---
+## Vulnerability Analysis
+
+---
+
+### Insufficient Password Policy Enabling Seasonal Password Spray
+
+**Severity:** Medium
+**CVSS Score:** 6.5
+
+**Description:** Domain account `fiona.clark` was protected by a predictable seasonal password (`Summer2023`) conforming to a `Season+Year` pattern. The password was recovered through a low-effort spray against a list of valid domain accounts.
+
+**Root Cause:** The organization enforces password rotation without preventing predictable patterns. Users default to seasonal increments when forced to change passwords on a schedule, and no technical control rejects common password formats.
+
+**Impact:** Unauthenticated network access to a valid domain account, enabling SMB enumeration, SYSVOL access, and further Active Directory reconnaissance.
+
+**Remediation:**
+- Deploy Microsoft Entra Password Protection or equivalent to block known-weak and seasonal patterns
+- Enforce minimum complexity requirements that reject dictionary words
+- Implement account lockout and alerting on repeated failed authentication attempts
+
+---
+
+### Hardcoded Credentials in SYSVOL .NET Executable
+
+**Severity:** High
+**CVSS Score:** 8.8
+
+**Description:** A .NET executable (`ResetPassword.exe`) stored in the domain-readable `SYSVOL` share contains hardcoded credentials for the `svc_helpdesk` service account in plaintext UTF-16 LE strings, recoverable by any authenticated domain user with `strings -e l`.
+
+**Root Cause:** A developer embedded service account credentials directly in application code and deployed the compiled binary to a network share with no access restriction. No secrets management solution was used at any point in the development or deployment process.
+
+**Impact:** Any authenticated domain user can retrieve the `svc_helpdesk` credentials, gaining access to any resource that account can reach — including Active Directory permission abuse via its `GenericAll` rights over another user.
+
+**Remediation:**
+- Rotate the `svc_helpdesk` credential immediately and remove the binary from SYSVOL
+- Store all service credentials in a secrets manager (e.g., Azure Key Vault, HashiCorp Vault, Windows DPAPI)
+- Audit SYSVOL and NETLOGON contents for sensitive files on a regular schedule
+
+---
+
+### Excessive Active Directory DACL — GenericAll over Domain User
+
+**Severity:** High
+**CVSS Score:** 8.8
+
+**Description:** The `svc_helpdesk` account holds `GenericAll` permissions over the `christopher.lewis` user object in Active Directory, granting full control including the ability to reset the account password without knowing the current one.
+
+**Root Cause:** Overly permissive access control entries were granted to a service account — likely for operational convenience — without understanding the security implications. Active Directory ACLs are rarely audited and dangerous permission paths accumulate silently over time.
+
+**Impact:** An attacker controlling `svc_helpdesk` can reset `christopher.lewis`'s password and authenticate as that user, gaining WinRM access and the ability to pivot further into the domain.
+
+**Remediation:**
+- Remove the `GenericAll` ACE from `svc_helpdesk` over `christopher.lewis`
+- Apply least-privilege to all service accounts in Active Directory
+- Schedule regular AD ACL audits using BloodHound or PingCastle to identify dangerous delegation paths
+
+---
+
+### Kerberoastable Service Account with Crackable Password
+
+**Severity:** High
+**CVSS Score:** 8.8
+
+**Description:** The `svc_mssql` account has a registered Service Principal Name (SPN), making it a Kerberoasting target. Any authenticated domain user can request a service ticket for this account and attempt offline password cracking. The password (`Service1`) is present in common wordlists and cracked in seconds.
+
+**Root Cause:** A weak, human-memorable password was assigned to a service account with a registered SPN. Kerberoastable accounts are only safe when their passwords are long, random, and computationally uncrackable — a short dictionary word eliminates this protection entirely.
+
+**Impact:** Full recovery of the `svc_mssql` credential, enabling Silver Ticket forgery, sysadmin-level MSSQL authentication, and remote code execution via `xp_cmdshell`.
+
+**Remediation:**
+- Assign a randomly generated password of at least 25 characters to all Kerberoastable service accounts
+- Migrate to Group Managed Service Accounts (gMSA), which rotate passwords automatically and are not Kerberoastable
+- Monitor for abnormal or high-volume TGS ticket requests
+
+---
+
+### Silver Ticket Forgery Enabling Sysadmin MSSQL Access
+
+**Severity:** High
+**CVSS Score:** 8.8
+
+**Description:** With the `svc_mssql` NTLM hash recovered via Kerberoasting, a Silver Ticket was forged offline impersonating the domain Administrator directly to the MSSQL service. Because the Kerberos protocol delegates ticket validation entirely to the service using only its own secret key, the KDC is never contacted and the forgery produces no domain-level authentication logs.
+
+**Root Cause:** Silver Ticket attacks are an inherent consequence of Kerberos architecture when a service account's NTLM hash is known. The design delegates ticket verification to the service itself, meaning any attacker who obtains the hash can forge a valid ticket for any identity without involving the domain controller.
+
+**Impact:** Authentication to MSSQL as Administrator with sysadmin privileges, enabling `xp_cmdshell` activation and full remote code execution on the database server.
+
+**Remediation:**
+- Prevent initial credential exposure by addressing the Kerberoastable service account (see above)
+- Enforce AES-only Kerberos encryption (disable RC4/NTLM) to raise the cost of Silver Ticket attacks
+- Add `svc_mssql` to the Protected Users security group where feasible
+- Deploy Microsoft Defender for Identity to detect anomalous Kerberos ticket patterns
+
+---
+
+### SeImpersonatePrivilege Abuse Leading to SYSTEM
+
+**Severity:** High
+**CVSS Score:** 7.8
+
+**Description:** The `svc_mssql` account holds `SeImpersonatePrivilege`. Combined with GodPotato, this privilege allows the process to force a SYSTEM-level NTLM authentication and impersonate the resulting token, escalating from a service account to `NT AUTHORITY\SYSTEM`.
+
+**Root Cause:** `SeImpersonatePrivilege` is granted by default to accounts running SQL Server services. It is intended to allow the service to impersonate connecting clients, but creates a reliable SYSTEM escalation path when combined with potato-family token impersonation exploits.
+
+**Impact:** Full SYSTEM-level code execution on the domain controller, enabling NTDS.dit extraction and complete domain compromise.
+
+**Remediation:**
+- Run MSSQL under a gMSA or a tightly scoped domain account with `SeImpersonatePrivilege` explicitly removed
+- Keep Windows fully patched — many potato variants are mitigated by cumulative updates
+- Restrict service account privileges to the minimum required for the service to function
+
+---
 
 ## What I Learned
 
