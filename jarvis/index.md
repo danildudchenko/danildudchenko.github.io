@@ -12,6 +12,21 @@ Jarvis is a Medium-rated Linux machine on Hack The Box that covers a realistic a
 
 The machine starts with a manually exploitable SQL injection — no sqlmap, no automation — requiring you to enumerate the database step by step, understand the structure, and write a webshell directly to the server. From there it chains into command injection via a sudo misconfiguration, where a developer's blacklist has one critical gap. The final escalation abuses a SUID systemctl binary to create a malicious service that executes as root.
 
+## Summary of Findings
+
+| # | Vulnerability | Severity | CVSS Score |
+|---|---------------|----------|------------|
+| 1 | SQL Injection (UNION-based) | Critical | 9.8 |
+| 2 | Command Injection via Filter Bypass | High | 8.8 |
+| 3 | SUID `systemctl` Privilege Escalation | High | 7.8 |
+
+**Rationale for scores:**
+
+- **9.8 Critical** — Unauthenticated, network-reachable SQLi (`/room.php?cod=`) that yields full DB read and `INTO OUTFILE` webshell write. AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:L.
+- **8.8 High** — `simpler.py` command injection. Blacklist bypass via `$()` gives code execution as `pepper`. AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H.
+- **7.8 High** — Local privilege escalation: `pepper` can run `systemctl` as root via SUID bit, enabling arbitrary service/command execution. AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H.
+
+
 **Techniques covered:**
 - Manual SQL injection (UNION-based)
 - Database enumeration via `information_schema`
