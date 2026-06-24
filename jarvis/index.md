@@ -310,6 +310,65 @@ nc -lnvp 1437
 
 ---
 
+## Vulnerability Analysis
+
+---
+
+### SQL Injection in room.php cod Parameter
+
+**Severity:** Critical
+**CVSS Score:** 9.8
+
+**Description:** The `cod` parameter in `/room.php` is passed directly into a SQL query without sanitization or parameterization. An unauthenticated attacker can manipulate the query to extract database contents and write arbitrary files to the server.
+
+**Root Cause:** The application constructs SQL queries through string concatenation using untrusted user input. No prepared statements or input validation are in place, and the database user retains the `FILE` privilege required to write to the filesystem.
+
+**Impact:** Full database read access, credential exposure, and arbitrary PHP webshell write to the web root via MySQL's `INTO OUTFILE` clause — resulting in unauthenticated remote code execution as `www-data`.
+
+**Remediation:**
+- Replace dynamic SQL construction with parameterized queries or prepared statements
+- Revoke the `FILE` privilege from the database user
+- Enforce least-privilege on all database accounts
+
+---
+
+### OS Command Injection via Filter Bypass in simpler.py
+
+**Severity:** High
+**CVSS Score:** 8.8
+
+**Description:** The `-p` flag of `simpler.py` accepts user input and passes it directly to `os.system()`. A developer-implemented blacklist blocks common shell metacharacters but does not account for Bash command substitution via `$()`, allowing full command injection.
+
+**Root Cause:** Blacklist-based input validation is inherently incomplete. The developer enumerated known-dangerous characters without accounting for all shell execution contexts. The correct approach is an allowlist — permitting only valid IPv4 characters — rather than attempting to block every dangerous pattern.
+
+**Impact:** Any user with `sudo` rights to execute `simpler.py` as `pepper` can inject arbitrary commands and obtain a shell as that user, enabling full lateral movement from `www-data` to a higher-privileged account.
+
+**Remediation:**
+- Validate input against a strict allowlist permitting only `[0-9.]`
+- Replace `os.system()` with `subprocess.run()` using a list of arguments to prevent shell interpretation
+- Remove `NOPASSWD` sudo entries for any script that accepts user-controlled input
+
+---
+
+### SUID systemctl Privilege Escalation
+
+**Severity:** High
+**CVSS Score:** 7.8
+
+**Description:** The `/bin/systemctl` binary has the SUID bit set and is owned by root, restricted to the `pepper` group. Any member of `pepper` can create a malicious systemd service and start it using the SUID binary, executing arbitrary commands as root.
+
+**Root Cause:** The SUID bit was set on a system management binary that controls privileged operations. System binaries responsible for managing services should never run with elevated effective UID — privileged access should be delegated through `sudo` with explicit command restrictions instead.
+
+**Impact:** A user with shell access as `pepper` can define a malicious service file and use SUID `systemctl` to start it, resulting in full root code execution and complete system compromise.
+
+**Remediation:**
+- Remove the SUID bit: `chmod u-s /bin/systemctl`
+- If delegation is required, grant access via `sudo` with an explicit, scoped command allowlist
+- Audit all SUID binaries regularly: `find / -perm -4000 -type f 2>/dev/null`
+
+---
+
+
 ## What I Learned
 
 **SQL injection scope matters.** Querying `information_schema.columns` by table name alone without specifying `table_schema` can return results from the wrong database entirely. Always scope with `WHERE table_schema='target_db' AND table_name='target_table'`.
