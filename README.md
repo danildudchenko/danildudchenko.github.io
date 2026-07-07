@@ -4,7 +4,7 @@
 - [Certified — WriteOwner, Shadow Credentials, ESC9](certified)
 
 ## Windows Methodology
-- [Credential Hunting](windows/cred-hunting)
+- [Credential Hunting](windows/cred-hunting.md)
 
 ## Web
 ### SQLi
