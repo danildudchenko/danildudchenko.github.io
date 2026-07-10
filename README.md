@@ -9,7 +9,7 @@
 - [Jarvis — SQLi, Command Injection, SUID systemctl](jarvis)
 
 ### Windows
-*Coming soon*
+- [Medjed — BarracudaDrive Admin Reset, Lua Server Page RCE, NT AUTHORITY\SYSTEM](medjed)
 
 ## Windows Methodology
 - [Credential Hunting](windows/cred-hunting.md)
