@@ -11,6 +11,7 @@
 
 ### Windows
 - [Medjed — BarracudaDrive Admin Reset, Lua Server Page RCE](medjed)
+- [Querier — Anonymous SMB, MSSQL xp_dirtree Hash Theft, GPP Credentials](querier)
 
 ## Windows Methodology
 - [Credential Hunting](windows/cred-hunting.md)
