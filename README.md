@@ -14,7 +14,7 @@
 - [Querier — Anonymous SMB, MSSQL xp_dirtree Hash Theft, GPP Credentials](querier)
 
 ## Active Directory Methodology
-- [Kerberoasting vs AS-REP Roasting](ad/kerberoasting-vs-asrep-roasting.md)
+- [Kerberoasting vs AS-REP Roasting](AD/kerberoasting-vs-asrep-roasting.md)
 
 ## Windows Methodology
 - [Credential Hunting](windows/cred-hunting.md)
