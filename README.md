@@ -15,6 +15,7 @@
 
 ## Active Directory Methodology
 - [Kerberoasting vs AS-REP Roasting](AD/kerberoasting-vs-asrep-roasting.md)
+- [NetExec - Swiss Army Knife for Network Authentication Testing](AD/netexec.md)
 
 ## Windows Methodology
 - [Credential Hunting](windows/cred-hunting.md)
