@@ -154,6 +154,24 @@ Collect BloodHound data without uploading SharpHound to the target:
 nxc ldap 10.10.10.10 -u user -p password --bloodhound --collection All
 ```
 
+## Known Limitations
+
+NetExec is not reliable for every protocol. Two services where it consistently causes problems:
+
+**RDP** - NXC will sometimes report `(Pwned!)` or a successful login on RDP when the credentials do not actually work. Do not trust NXC for RDP access confirmation - verify manually with `xfreerdp` or `rdesktop`.
+
+**MSSQL** - NXC's MSSQL module has connection issues depending on the target configuration. Authentication may fail or behave unexpectedly even with valid credentials. Use `impacket-mssqlclient` instead - it is more reliable and gives you a proper interactive session:
+
+```bash
+impacket-mssqlclient user:password@10.10.10.10
+```
+
+```bash
+impacket-mssqlclient -windows-auth user:password@10.10.10.10
+```
+
+This is why in [nxcprobe](https://github.com/danildudchenko/nxcprobe) - a script that tests credentials across multiple services automatically - MSSQL validation is handled by impacket rather than NXC to avoid false negatives.
+
 ## Quick Reference
 
 | Protocol | Use Case | Command |
