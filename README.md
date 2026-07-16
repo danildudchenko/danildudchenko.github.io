@@ -4,6 +4,7 @@
 - [Nagoya — Password Spraying, Kerberoasting, Silver Ticket, GodPotato](nagoya)
 - [Certified — WriteOwner, Shadow Credentials, ESC9](certified)
 - [Escape — MSSQL Hash Capture, Credential Hunting, ESC1](escape)
+- [Sauna — OSINT Username Enumeration, AS-REP Roasting, DCSync](sauna)
 
 ### Linux
 - [Jarvis — SQLi, Command Injection, SUID systemctl](jarvis)
