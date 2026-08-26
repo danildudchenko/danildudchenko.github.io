@@ -24,3 +24,4 @@
 ## Web
 ### SQLi
 - [SQL UNION Attacks](web/sqli/union-attacks.md)
+- [Blind SQL Injection — Oracle Fingerprinting, Conditional Error Oracle, Burp Intruder Cluster Bomb](web/sqli/BlindSQLi.md)
